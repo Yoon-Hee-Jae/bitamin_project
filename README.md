@@ -208,6 +208,58 @@ print(df1['TF-keywords'][:10])
 
 ```
 
+## 2-3 제목과 본문과의 코사인유사도를 통해 최종 키워드 선정
+앞에서 2가지 방법으로 구한 키워드를 합쳐서 최종 키워드 선별 과정을 추가하였습니다.
+추출된 키워드들과 제목과 본문과의 코사인유사도를 구한 다음 가장 유사도가 높은 키워드들로 선정을 하였습니다. 
+코사인 유사도를 계산하기 위해서 제목과 본문을 벡터화 하는 과정을 진행하였고 두 벡터값을 가중합(제목=0.7, 본문=0.3)하여 의미 벡터를 생성하였습니다. 이를 통하여 의미 벡터와 키워드 벡터간의 코사인 유사도 계산을 가능하게 하였습니다.
+
+```python
+for i in range(len(df)):
+  #  제목, 본문, 키워드 후보 데이터
+  title = df['title_p'][i]
+  body = df['content_p'][i]
+  keyword_candidates = df['merged_col'][i]
+
+  # TF-IDF 벡터화 객체 생성
+  tfidf_vectorizer = TfidfVectorizer()
+
+  # 제목과 본문을 따로 TF-IDF 벡터화
+  title_vector = tfidf_vectorizer.fit_transform([title])
+  body_vector = tfidf_vectorizer.transform([body])
+
+  # 키워드 후보들을 TF-IDF 벡터화
+  keyword_candidate_vectors = tfidf_vectorizer.transform(keyword_candidates)
+
+  # 제목과 본문의 TF-IDF 벡터를 가중합(Weighted Sum) 및 정규화(Normalization)하여 의미 벡터 생성
+  alpha = 0.7  # 제목 벡터 가중치 (0과 1 사이의 값을 선택)
+  beta = 0.3   # 본문 벡터 가중치 (0과 1 사이의 값을 선택)
+
+  title_vector = title_vector.toarray()
+  body_vector = body_vector.toarray()
+  title_body_vector = alpha * title_vector + beta * body_vector
+
+  # 정규화(Normalization)하여 의미 벡터를 단위 벡터로 변환
+  title_body_vector = normalize(title_body_vector)[0]
+
+  # 키워드 후보 벡터와의 의미 유사도를 측정하여 Top-K개의 키워드 선정
+  k = 3  # Top-K 개수를 선택해주세요
+
+def cosine_similarity(vec1, vec2):
+  dot_product = np.dot(vec1, vec2)
+  norm_vec1 = np.linalg.norm(vec1)
+  norm_vec2 = np.linalg.norm(vec2)
+  return dot_product / (norm_vec1 * norm_vec2)
+
+similarity_scores = [cosine_similarity(title_body_vector, candidate.toarray()[0]) for candidate in keyword_candidate_vectors]
+top_k_indices = np.argsort(similarity_scores)[-k:]
+selected_keywords = [keyword_candidates[i] for i in top_k_indices]
+
+print("선택된 키워드:")
+for keyword in selected_keywords:
+    print(keyword)
+```
+
+# 3. 대주제 탐색(DBSCAN)
 
 
 
