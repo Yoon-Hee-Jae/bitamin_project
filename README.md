@@ -1,12 +1,11 @@
-#  키워드 추출 기반 경제 트렌드 뉴스레터 서비스 "비요뜨"
-"비요뜨" 서비스는 매일매일의 뉴스를 키워드 형태로 정보를 압축하여 전달해주는 서비스입니다.
-키워드 형태로 정보를 압축하여 정보를 받은 고객은 경제 트랜드를 파악할 수 있게 됩니다.
+#  비요뜨
+   키워드 추출 기반 뉴스 구독 서비스 "비요뜨" 서비스는 매일매일의 뉴스를 키워드 형태로 정보를 압축하여 전달해주는 서비스입니다. 키워드 형태로 정보를 압축하여 정보를 받은 고객은 경제 트랜드를 빠르게 파악할 수 있게 됩니다.
 
 # 목차
 1. 뉴스 수집 및 전처리
 
 2. 기사별 Top-k개 키워드 선정
-   - 빈도수 기반(TF-IDF)
+   - N- gram과 빈도수 기반(TF-IDF) 2가지 방법을 사용해 키워드 추출
    - 코사인 유사도 거리 기반
 
 3. 대주제 탐색(DBSCAN)
@@ -130,10 +129,84 @@ def preprocess(text):
     return text
 ```
 
+# 2. 키워드 추출
+키워드 추출의 경우 정확성을 높이기 위해서 N-gram과 TF-IDF 2가지 방식으로 키워드를 추출하였습니다.
+이렇게 두가지 방식으로 추출된 키워드를 합친 다음 제목과 본문과의 코사인 유사도를 계산하여
+최종적으로 기사마다 코사인 유사도가 높은 순으로 10개의 키워드를 선정하였습니다. 
 
-<>
+## 2-1 N-gram
+"연어"란 두 단어가 연속적으로 쓰여 뜻을 가지는 단어를 의미합니다.
+하나의 단어로만 키워드를 선정하는 것보다 연어로 추출하는 경우가 결과가 더 좋은 것을 확인하였습니다. 연어로 키워드를 추출하기 위해서 음절의 단위를 형태소 분석 결과로 나누어서 정확도를 높인 연어가 뽑힐 수 있도록 설정하였습니다.
+```python
+from nltk.collocations import BigramAssocMeasures
+from nltk.collocations import TrigramAssocMeasures
+from nltk.metrics.association import QuadgramAssocMeasures
+from nltk.collocations import BigramCollocationFinder
 
+def collocations_single(num):
 
+    ngram = [(BigramAssocMeasures(),BigramCollocationFinder),
+             (TrigramAssocMeasures(),TrigramCollocationFinder),
+              (QuadgramAssocMeasures(),QuadgramCollocationFinder)]
+
+    # 텍스트 지정, 출력
+    doc = selectsample(num, content=True)
+    print('제목/', selectsample(num, content=False))
+    print(' ')
+    print('본문/', doc)
+    print(' ')
+
+    # 형태소 분석기 - 명사만 추출
+    okt = Okt()
+    nouns = okt.nouns(doc) # get nouns
+    tagged_words = okt.pos(doc) # 품사 부착
+    words = [w for w, t in tagged_words] # 단어+품사 중 단어만 선택
+    ignored_words = [u'되다', '되었다', '됐다', '하다', '하였다', '했다', '이다', '이었다', '였다', '있다', '없다'] # 불용어
+
+    # 각 알고리즘별로 bigram, trigram, quadgram 10개씩 뽑아 리스트 만들기
+    founds_from_4measure = []
+    for measure, finder in ngram:
+        '''명사 vs 전체 단어 택 1'''
+    #     finder = finder.from_words(nouns)
+        finder = finder.from_words(words) # 숫자, 알파벳(LG, NH), 영어 포함
+
+        finder.apply_word_filter(lambda w: len(w) < 2 or w in ignored_words) # 제외조건: 길이가 1이거나 ignored_words에 포함되면 제외
+        finder.apply_freq_filter(3) # only bigrams that appear 3+ times
+        founds = finder.nbest(measure.pmi, 10)       # pmi - 상위 10개 추출
+        founds += finder.nbest(measure.chi_sq, 10)   # chi_sq - 상위 10개 추출
+        founds += finder.nbest(measure.mi_like, 10)  # mi_like - 상위 10개 추출
+        founds += finder.nbest(measure.jaccard, 10)  # jaccard - 상위 10개 추출
+
+        founds_from_4measure += founds
+
+    # 나뉜 연어를 한 단어로 묶고, 3/4 voting된 최종 연어 출력
+    collocations = [' '.join(collocation) for collocation in founds_from_4measure]
+    collocations = [(w,f) for w,f in Counter(collocations).most_common() if f > 2]
+    pprint(collocations)
+```
+
+## 2-2 TF-IDF를 통해 키워드 추출
+TF-IDF란 문서내에서 특정 단어의 중요도를 계산하는 방법입니다.
+TF = 하나의 문서내에서 특정 단어가 나타나는 빈도
+IDF = 여러 문서에서 특정 단어가 얼마나 공통적으로 등장하는지를 수치화한 값
+TF-IDF = 한 문서내에서 많이 등장하면서 다른 문서에서 적게 등장할수록 중요한 단어로 인식합니다.
+
+```python
+# TF-IDF를 사영하여 문서 벡터화 진행
+tfidf_matrix = tfidfv.fit_transform(df1['content_p'])
+
+for i in range(len(df1)):
+    doc_tfidf = tfidf_matrix[i].toarray().flatten() # 벡터화시킨 것을 다시 문자로
+    sorted_indices = doc_tfidf.argsort()[::-1] # tf-idf값이 높을수록 중요한 키워드인데 높은 순으로 정렬
+    top_keywords = [tfidfv.get_feature_names_out()[idx] for idx in sorted_indices[:15]]  # 상위 10개 단어만 추출 # 숫자나 영어 단어만 나올 경우 제거하고 다음 키워드를 올려서 쓸거기 때문에 넉넉히 뽑음
+    # 키워드를 저장할 빈 리스트 생성
+    keywords = []
+    keywords.append(top_keywords)
+    # 각 행에 알맞은 키워드 부여
+    df1['TF-keywords'][i] = keywords
+print(df1['TF-keywords'][:10])
+
+```
 
 
 
