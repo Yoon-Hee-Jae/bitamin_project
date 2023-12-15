@@ -260,6 +260,35 @@ for keyword in selected_keywords:
 ```
 
 # 3. 대주제 탐색(DBSCAN)
+당일 수 많은 뉴스들 사이에서 대표적인 주제들을 선정하기 위해서 군집화 기술 중 하나인 DBSCAN을 사용하였습니다. 군집화에서 K-MEANS 대신 DBSCAN을 사용한 이유는 K-MEANS의 경우 사전에 군집의 개수를 설정해줘야만 한다는 문제점이 있었기 때문입니다. 매일매일 대주제의 개수가 정해져있는 것이 아니기 때문에 사전에 군집의 개수를 설정하지 않고 자동으로 군집의 개수를 정하는 DBSCAN을 선택하였습니다. 
+DBSCAN의 경우 각각 제목과 키워드 2가지 방식으로 군집화를 실시하였고 그 중 결과가 더 나은 키워드로 군집화한 것을 선택하였습니다.
 
+<tf-idf 임베딩(+normalize)>
 
+```python
+from sklearn.feature_extraction.text import TfidfVectorizer
 
+#text = [" ".join(noun) for noun in df['final_key']]
+text = df['title_p']
+tfidf_vectorizer = TfidfVectorizer(min_df = 3, ngram_range=(1,5))
+tfidf_vectorizer.fit(text)
+vector = tfidf_vectorizer.transform(text).toarray()
+
+vector = np.array(vector)
+```
+
+<DBSCAN>
+```python
+#2 DBSCAN Clustering
+
+from sklearn.cluster import DBSCAN
+
+model = DBSCAN(eps=0.6,min_samples=12, metric = "cosine")
+#     거리 계산 식으로는 Cosine distance를 이용
+#     eps이 낮을수록, min_samples 값이 높을수록 군집으로 판단하는 기준이 까다로움.
+result = model.fit_predict(vector)
+df['result'] = result
+
+print('군집개수 :', result.max())
+df
+```
