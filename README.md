@@ -278,17 +278,20 @@ vector = np.array(vector)
 ```
 
 <DBSCAN>
+
 ```python
-#2 DBSCAN Clustering
+
+2 DBSCAN Clustering
 
 from sklearn.cluster import DBSCAN
 
 model = DBSCAN(eps=0.6,min_samples=12, metric = "cosine")
-#     거리 계산 식으로는 Cosine distance를 이용
-#     eps이 낮을수록, min_samples 값이 높을수록 군집으로 판단하는 기준이 까다로움.
+     거리 계산 식으로는 Cosine distance를 이용
+     eps이 낮을수록, min_samples 값이 높을수록 군집으로 판단하는 기준이 까다로움.
 result = model.fit_predict(vector)
 df['result'] = result
 
 print('군집개수 :', result.max())
 df
+
 ```
