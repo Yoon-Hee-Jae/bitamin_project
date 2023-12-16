@@ -259,9 +259,10 @@ for keyword in selected_keywords:
     print(keyword)
 ```
 
-# 3. 대주제 탐색(DBSCAN)
+# 3-1. 대주제 탐색(DBSCAN)
 당일 수 많은 뉴스들 사이에서 대표적인 주제들을 선정하기 위해서 군집화 기술 중 하나인 DBSCAN을 사용하였습니다. 군집화에서 K-MEANS 대신 DBSCAN을 사용한 이유는 K-MEANS의 경우 사전에 군집의 개수를 설정해줘야만 한다는 문제점이 있었기 때문입니다. 매일매일 대주제의 개수가 정해져있는 것이 아니기 때문에 사전에 군집의 개수를 설정하지 않고 자동으로 군집의 개수를 정하는 DBSCAN을 선택하였습니다. 
-DBSCAN의 경우 각각 제목과 키워드 2가지 방식으로 군집화를 실시하였고 그 중 결과가 더 나은 키워드로 군집화한 것을 선택하였습니다.
+DBSCAN의 경우 각각 제목과 키워드 2가지 방식으로 군집화를 실시하였고 그 중 결과가 더 나은 키워드로 군집화한 것을 선택하였습니다. 
+* DBSCAN의 하이퍼파라미터의 경우(eps,min_samples) 여러 값을 시도해보며 군잡화된 결과물을 직접 눈으로 보고 팀원들과의 상의 후 결정하였습니다.
 
 <tf-idf 임베딩(+normalize)>
 
@@ -295,3 +296,83 @@ print('군집개수 :', result.max())
 df
 
 ```
+<DBSCAN 결과 시각화>
+
+![image](https://github.com/Yoon-Hee-Jae/bitamin_project/assets/140389762/512a0674-c2aa-48d4-9fcc-12baa7305d01)
+
+
+<군집화된 기사의 제목>
+
+![image](https://github.com/Yoon-Hee-Jae/bitamin_project/assets/140389762/633a0ba3-2447-4450-ba7a-5c124ff15b9c)
+
+비슷한 주제의 기사들이 군집화된 것을 볼 수 있음
+
+
+
+
+
+
+
+# 3-2 대주제 탐색 - keybert
+군집화 후 각 군집속에 포함된 기사의 제목들을 모아 keybert를 사용하여 대주제 키워드를 선정하였습니다. 
+
+```python
+
+## title로 한단어~두단어 키워드 출력
+for i in range(1,10):
+    dff = df[df['cluster_num']==i]['title']
+    dff = ' '.join(dff)
+    morphemes = okt.pos(dff)
+    filtered_words = [word for word, pos in morphemes if pos in ['Noun', 'Number', 'Alpha', 'Suffix']]
+    filtered_words = ' '.join(filtered_words)
+    kw_model = KeyBERT('paraphrase-multilingual-MiniLM-L12-v2')
+    keywords = kw_model.extract_keywords(filtered_words,
+                                    keyphrase_ngram_range=(1,2),
+                                    use_maxsum=True,
+                                    nr_candidates = 20,
+                                    top_n = 3,
+                                    use_mmr = True,
+                                    diversity=0.7)
+    print(keywords)
+    result = []
+    result.append(keywords)
+
+```
+
+# 4. 기사 요약
+군집화된 개수만큼 총 8개의 기사 요약문을 생성하기로 하였습니다.
+요약문의 경우 각 군집에 속한 기사를 각각 요약한 후 기사 개수만큼 만들어진 요약문을 합쳐서 다시 요약을 진행하였습니다.
+
+```python
+
+for i in range(len(news_lst)):
+  # 뉴스요약
+
+    tokenizer =  PreTrainedTokenizerFast.from_pretrained("ainize/kobart-news")
+    model = BartForConditionalGeneration.from_pretrained("ainize/kobart-news")
+
+    inputs_ids = tokenizer.encode(data['content'][i], return_tensors="pt")
+
+# kobert가 정해둔 데이터 크기의 한계가 있어서 텍스트가 긴 뉴스같은 경우는 잘라서 진행
+# 모델 입력 최대값 구하는 코드
+    max_input_length = model.config.max_position_embeddings
+
+    inputs_ids = inputs_ids[:, :max_input_length]
+
+    summary_text_ids = model.generate(
+        input_ids = inputs_ids,
+        bos_token_id = model.config.bos_token_id,
+        eos_token_id = model.config.eos_token_id,
+        length_penalty = 2.0,
+        max_length = 128,
+        min_length = 32,
+        num_beams = 4)
+  # 요약한 값을 summary라는 새 열에 저장
+    #data['summary'][i] = tokenizer.decode(summary_text_ids[0], skip_special_tokens=True)
+    tokenizer.decode(summary_text_ids[0], skip_special_tokens=True)
+
+```
+
+
+
+
